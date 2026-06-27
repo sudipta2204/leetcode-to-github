@@ -39,11 +39,11 @@ saveBtn.addEventListener("click", async () => {
     if (!res.ok) throw new Error(`GitHub returned ${res.status}`);
 
     await chrome.storage.sync.set({ githubToken: token, githubOwner: owner, githubRepo: repo });
-    showStatus("✅ Saved & verified! You're all set.", false);
+    showStatus("Saved & verified! You're all set.", false);
   } catch (err) {
-    showStatus(`❌ ${err.message}`, true);
+    showStatus(`${err.message}`, true);
   } finally {
-    saveBtn.textContent = "💾 Save Settings";
+    saveBtn.textContent = "Save Settings";
     saveBtn.disabled = false;
   }
 });
