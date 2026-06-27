@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>LeetCode → GitHub</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 320px;
+      font-family: 'Segoe UI', sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      padding: 20px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .logo {
+      font-size: 22px;
+    }
+
+    .title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #58a6ff;
+    }
+
+    .subtitle {
+      font-size: 11px;
+      color: #8b949e;
+    }
+
+    label {
+      display: block;
+      font-size: 11px;
+      color: #8b949e;
+      margin-bottom: 4px;
+      margin-top: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    input {
+      width: 100%;
+      padding: 9px 12px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #e6edf3;
+      font-size: 13px;
+      font-family: monospace;
+      outline: none;
+      transition: border 0.2s;
+    }
+
+    input:focus {
+      border-color: #58a6ff;
+    }
+
+    .hint {
+      font-size: 11px;
+      color: #6e7681;
+      margin-top: 4px;
+    }
+
+    .hint a {
+      color: #58a6ff;
+      text-decoration: none;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 18px;
+      padding: 10px;
+      background: #238636;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #2ea043;
+    }
+
+    .status {
+      margin-top: 12px;
+      font-size: 12px;
+      text-align: center;
+      min-height: 18px;
+      color: #3fb950;
+    }
+
+    .status.error {
+      color: #f85149;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #21262d;
+      margin: 18px 0 4px;
+    }
+
+    .info-box {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 11px;
+      color: #8b949e;
+      line-height: 1.6;
+    }
+
+    .info-box b {
+      color: #e6edf3;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <!-- <span class="logo"></span> -->
+    <div>
+      <div class="title">LeetCode → GitHub</div>
+      <div class="subtitle">Auto-save accepted solutions</div>
+    </div>
+  </div>
+
+  <label>GitHub Personal Access Token</label>
+  <input type="password" id="token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" />
+  <div class="hint">
+    Needs <b>repo</b> scope →
+    <a href="https://github.com/settings/tokens/new" target="_blank">Generate token</a>
+  </div>
+
+  <label>GitHub Username (Owner)</label>
+  <input type="text" id="owner" placeholder="your-username" />
+
+  <label>Repository Name</label>
+  <input type="text" id="repo" placeholder="leetcode-solutions" />
+  <div class="hint">Must already exist on GitHub</div>
+
+  <button id="saveBtn">Save Settings</button>
+  <div class="status" id="status"></div>
+
+  <hr class="divider" />
+
+  <div class="info-box">
+    <b>How it works:</b><br>
+    Solve a LeetCode problem → hit Submit → when result is <b>Accepted</b>, your solution is automatically pushed to:<br><br>
+    <code>repo/Easy/1_Two_Sum.java</code><br>
+    <code>repo/Medium/3_Longest_Substring.java</code>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
