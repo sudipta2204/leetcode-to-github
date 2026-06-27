@@ -43,6 +43,49 @@
     return match ? match[1] : null;
   }
 
+    // ── Utility: detect selected language and return { code, extension, langName } ──
+  const LANG_MAP = {
+    "c++":        { ext: "cpp",    name: "C++" },
+    "java":       { ext: "java",   name: "Java" },
+    "python3":    { ext: "py",     name: "Python3" },
+    "python":     { ext: "py",     name: "Python" },
+    "javascript": { ext: "js",     name: "JavaScript" },
+    "typescript": { ext: "ts",     name: "TypeScript" },
+    "c#":         { ext: "cs",     name: "C#" },
+    "c":          { ext: "c",      name: "C" },
+    "go":         { ext: "go",     name: "Go" },
+    "kotlin":     { ext: "kt",     name: "Kotlin" },
+    "swift":      { ext: "swift",  name: "Swift" },
+    "rust":       { ext: "rs",     name: "Rust" },
+    "ruby":       { ext: "rb",     name: "Ruby" },
+    "php":        { ext: "php",    name: "PHP" },
+    "dart":       { ext: "dart",   name: "Dart" },
+    "scala":      { ext: "scala",  name: "Scala" },
+    "elixir":     { ext: "ex",     name: "Elixir" },
+    "erlang":     { ext: "erl",    name: "Erlang" },
+    "racket":     { ext: "rkt",    name: "Racket" },
+  };
+
+  function getLanguageInfo() {
+    // LeetCode shows selected language in a button in the editor toolbar
+    const langBtn = document.querySelector('[data-track-load="description_content"] button') ||
+                    document.querySelector('button[id*="headlessui-listbox-button"]') ||
+                    [...document.querySelectorAll("button")].find(b =>
+                      Object.keys(LANG_MAP).includes(b.textContent.trim().toLowerCase())
+                    );
+
+    let langRaw = langBtn ? langBtn.textContent.trim().toLowerCase() : "java";
+
+    // Also try reading from the URL or editor title
+    const editorLangEl = document.querySelector('[class*="language-"] span, [data-mode-id]');
+    if (editorLangEl) {
+      const candidate = (editorLangEl.textContent || editorLangEl.getAttribute("data-mode-id") || "").trim().toLowerCase();
+      if (LANG_MAP[candidate]) langRaw = candidate;
+    }
+
+    return LANG_MAP[langRaw] || { ext: "txt", name: langRaw };
+  }
+
   // ── Utility: get the solution code from the Monaco editor ──
   function getSolutionCode() {
     // Try monaco editor model first
@@ -61,10 +104,11 @@
   }
 
   // ── Push file to GitHub via API ──
-  async function pushToGitHub({ token, owner, repo, difficulty, title, questionId, description, code }) {
+  async function pushToGitHub({ token, owner, repo, difficulty, title, questionId, description, code, langInfo }) {
     const safeTitle = title.replace(/[^a-zA-Z0-9]/g, "_");
     const folder = difficulty.charAt(0).toUpperCase() + difficulty.slice(1).toLowerCase();
-    const path = `${folder}/${questionId}_${safeTitle}.java`;
+    const ext = langInfo ? langInfo.ext : "java";
+    const path = `${folder}/${questionId}_${safeTitle}.${ext}`;
 
     // Build file content
     const fileContent = [
@@ -164,6 +208,7 @@
         return;
       }
 
+      const langInfo = getLanguageInfo();
       const problem = await fetchProblemData(titleSlug);
       if (!problem) throw new Error("Could not fetch problem details");
 
@@ -177,7 +222,8 @@
         title: problem.title,
         questionId: problem.questionId,
         description,
-        code
+        code,
+        langInfo
       });
 
       lastPushedKey = titleSlug;
