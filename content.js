@@ -1,107 +1,103 @@
-// LeetCode to GitHub - Content Script
-// Watches for "Accepted" verdict and pushes solution to GitHub
-
 (function () {
-  let lastPushedKey = null; // prevents duplicate pushes for same submission
-  let isPushing = false;    // lock to prevent concurrent pushes
-  let debounceTimer = null; // debounce the observer firing
+  const script = document.createElement("script");
+  script.src = chrome.runtime.getURL("injected.js");
+  script.onload = () => script.remove();
+  (document.head || document.documentElement).appendChild(script);
 
-  // -- Utility: fetch problem metadata via LeetCode's GraphQL API --
-  async function fetchProblemData(titleSlug) {
-    const query = {
-      query: `
-        query getProblem($titleSlug: String!) {
-          question(titleSlug: $titleSlug) {
-            questionId
-            title
-            difficulty
-            content
-            topicTags { name }
-          }
-        }
-      `,
-      variables: { titleSlug }
-    };
+  let isPushing = false;
+  let lastSubmissionId = null;
 
-    const res = await fetch("https://leetcode.com/graphql", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(query)
-    });
-    const json = await res.json();
-    return json.data.question;
+  window.addEventListener("lc2gh_submission", async (e) => {
+    const { submissionId, code, langSlug } = e.detail;
+    if (!submissionId || isPushing || lastSubmissionId === submissionId) return;
+    isPushing = true;
+
+    try {
+      const result = await pollResult(submissionId);
+      if (!result || result.status_msg !== "Accepted") { isPushing = false; return; }
+
+      const { githubToken, githubOwner, githubRepo } = await chrome.storage.sync.get([
+        "githubToken", "githubOwner", "githubRepo"
+      ]);
+      if (!githubToken || !githubOwner || !githubRepo) {
+        showToast("Configure GitHub details in the popup.", false);
+        isPushing = false;
+        return;
+      }
+
+      const titleSlug = getTitleSlug();
+      const problem = await fetchProblemData(titleSlug);
+      if (!problem) throw new Error("Could not fetch problem details");
+
+      const LANG_MAP = {
+        "cpp": "cpp", "java": "java", "python3": "py", "python": "py",
+        "javascript": "js", "typescript": "ts", "csharp": "cs", "c": "c",
+        "golang": "go", "kotlin": "kt", "swift": "swift", "rust": "rs",
+        "ruby": "rb", "php": "php", "dart": "dart", "scala": "scala",
+        "elixir": "ex", "erlang": "erl", "racket": "rkt"
+      };
+      const ext = LANG_MAP[langSlug] || "txt";
+      const finalCode = result.code || code || "";
+
+      const filePath = await pushToGitHub({
+        token: githubToken, owner: githubOwner, repo: githubRepo,
+        difficulty: problem.difficulty, title: problem.title,
+        questionId: problem.questionId,
+        description: stripHtml(problem.content || ""),
+        code: finalCode, ext
+      });
+
+      lastSubmissionId = submissionId;
+      showToast(`Pushed!<br><code>${filePath}</code>`);
+    } catch (err) {
+      showToast(`Error: ${err.message}`, false);
+    } finally {
+      isPushing = false;
+    }
+  });
+
+  async function pollResult(submissionId) {
+    const url = `https://leetcode.com/submissions/detail/${submissionId}/check/`;
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 1500));
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.state === "SUCCESS") return data;
+      } catch (_) {}
+    }
+    return null;
   }
 
-  // -- Utility: strip HTML tags from problem description --
-  function stripHtml(html) {
-    const tmp = document.createElement("div");
-    tmp.innerHTML = html;
-    return tmp.innerText.trim();
-  }
-
-  // -- Utility: get title slug from current URL --
   function getTitleSlug() {
     const match = window.location.pathname.match(/\/problems\/([^/]+)/);
     return match ? match[1] : null;
   }
 
-  // -- Language map: all supported LeetCode languages --
-  const LANG_MAP = {
-    "c++":        { ext: "cpp",   name: "C++" },
-    "java":       { ext: "java",  name: "Java" },
-    "python3":    { ext: "py",    name: "Python3" },
-    "python":     { ext: "py",    name: "Python" },
-    "javascript": { ext: "js",    name: "JavaScript" },
-    "typescript": { ext: "ts",    name: "TypeScript" },
-    "c#":         { ext: "cs",    name: "C#" },
-    "c":          { ext: "c",     name: "C" },
-    "go":         { ext: "go",    name: "Go" },
-    "kotlin":     { ext: "kt",    name: "Kotlin" },
-    "swift":      { ext: "swift", name: "Swift" },
-    "rust":       { ext: "rs",    name: "Rust" },
-    "ruby":       { ext: "rb",    name: "Ruby" },
-    "php":        { ext: "php",   name: "PHP" },
-    "dart":       { ext: "dart",  name: "Dart" },
-    "scala":      { ext: "scala", name: "Scala" },
-    "elixir":     { ext: "ex",    name: "Elixir" },
-    "erlang":     { ext: "erl",   name: "Erlang" },
-    "racket":     { ext: "rkt",   name: "Racket" },
-  };
-
-  // -- Utility: detect selected language --
-  function getLanguageInfo() {
-    const langBtn = [...document.querySelectorAll("button")].find(b =>
-      Object.keys(LANG_MAP).includes(b.textContent.trim().toLowerCase())
-    );
-    let langRaw = langBtn ? langBtn.textContent.trim().toLowerCase() : "java";
-
-    const editorLangEl = document.querySelector('[data-mode-id]');
-    if (editorLangEl) {
-      const candidate = (editorLangEl.getAttribute("data-mode-id") || "").trim().toLowerCase();
-      if (LANG_MAP[candidate]) langRaw = candidate;
-    }
-
-    return LANG_MAP[langRaw] || { ext: "txt", name: langRaw };
+  async function fetchProblemData(titleSlug) {
+    const res = await fetch("https://leetcode.com/graphql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: `query getProblem($titleSlug: String!) {
+          question(titleSlug: $titleSlug) { questionId title difficulty content }
+        }`,
+        variables: { titleSlug }
+      })
+    });
+    const json = await res.json();
+    return json.data.question;
   }
 
-  // -- Utility: get the solution code from the Monaco editor --
-  function getSolutionCode() {
-    if (window.monaco && window.monaco.editor) {
-      const editors = window.monaco.editor.getEditors();
-      if (editors.length > 0) return editors[0].getValue();
-    }
-    const cm = document.querySelector(".CodeMirror");
-    if (cm && cm.CodeMirror) return cm.CodeMirror.getValue();
-    const ta = document.querySelector("textarea.inputarea");
-    if (ta) return ta.value;
-    return null;
+  function stripHtml(html) {
+    const d = document.createElement("div");
+    d.innerHTML = html;
+    return d.innerText.trim();
   }
 
-  // -- Push file to GitHub via API --
-  async function pushToGitHub({ token, owner, repo, difficulty, title, questionId, description, code, langInfo }) {
+  async function pushToGitHub({ token, owner, repo, difficulty, title, questionId, description, code, ext }) {
     const safeTitle = title.replace(/[^a-zA-Z0-9]/g, "_");
     const folder = difficulty.charAt(0).toUpperCase() + difficulty.slice(1).toLowerCase();
-    const ext = langInfo ? langInfo.ext : "java";
     const path = `${folder}/${questionId}_${safeTitle}.${ext}`;
 
     const fileContent = [
@@ -111,7 +107,7 @@
       ` *`,
       ` * ----- Description -----`,
       ` *`,
-      ...description.split("\n").map(line => ` * ${line}`),
+      ...description.split("\n").map(l => ` * ${l}`),
       ` *`,
       ` * ----- Solution -----`,
       ` */`,
@@ -122,22 +118,13 @@
     const encoded = btoa(unescape(encodeURIComponent(fileContent)));
     const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
 
-    let sha = undefined;
+    let sha;
     try {
-      const checkRes = await fetch(apiUrl, {
+      const check = await fetch(apiUrl, {
         headers: { Authorization: `token ${token}`, Accept: "application/vnd.github.v3+json" }
       });
-      if (checkRes.ok) {
-        const existing = await checkRes.json();
-        sha = existing.sha;
-      }
+      if (check.ok) sha = (await check.json()).sha;
     } catch (_) {}
-
-    const body = {
-      message: `Add solution: ${title} (${difficulty})`,
-      content: encoded,
-      ...(sha ? { sha } : {})
-    };
 
     const res = await fetch(apiUrl, {
       method: "PUT",
@@ -146,7 +133,11 @@
         Accept: "application/vnd.github.v3+json",
         "Content-Type": "application/json"
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify({
+        message: `Add solution: ${title} (${difficulty})`,
+        content: encoded,
+        ...(sha ? { sha } : {})
+      })
     });
 
     if (!res.ok) {
@@ -156,11 +147,9 @@
     return path;
   }
 
-  // -- Show a small toast notification on screen --
   function showToast(message, success = true) {
     const old = document.getElementById("lc2gh-toast");
     if (old) old.remove();
-
     const toast = document.createElement("div");
     toast.id = "lc2gh-toast";
     toast.style.cssText = `
@@ -174,78 +163,4 @@
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 5000);
   }
-
-  // -- Main: handle an Accepted submission --
-  async function handleAccepted() {
-    const titleSlug = getTitleSlug();
-    if (!titleSlug) return;
-
-    // Guard 1: already pushed this problem in this session
-    if (lastPushedKey === titleSlug) return;
-
-    // Guard 2: a push is already in progress
-    if (isPushing) return;
-    isPushing = true;
-
-    const { githubToken, githubOwner, githubRepo } = await chrome.storage.sync.get([
-      "githubToken", "githubOwner", "githubRepo"
-    ]);
-
-    if (!githubToken || !githubOwner || !githubRepo) {
-      showToast("Please configure your GitHub details in the extension popup.", false);
-      isPushing = false;
-      return;
-    }
-
-    try {
-      const code = getSolutionCode();
-      if (!code) {
-        showToast("Could not read solution code. Please try again.", false);
-        isPushing = false;
-        return;
-      }
-
-      const langInfo = getLanguageInfo();
-      const problem = await fetchProblemData(titleSlug);
-      if (!problem) throw new Error("Could not fetch problem details");
-
-      const description = stripHtml(problem.content || "");
-
-      const filePath = await pushToGitHub({
-        token: githubToken,
-        owner: githubOwner,
-        repo: githubRepo,
-        difficulty: problem.difficulty,
-        title: problem.title,
-        questionId: problem.questionId,
-        description,
-        code,
-        langInfo
-      });
-
-      lastPushedKey = titleSlug;
-      showToast(`Pushed!<br><code>${filePath}</code>`);
-    } catch (err) {
-      showToast(`Error: ${err.message}`, false);
-      console.error("[LeetCode to GitHub]", err);
-    } finally {
-      isPushing = false;
-    }
-  }
-
-  // -- Watch DOM for the "Accepted" text appearing --
-  const observer = new MutationObserver(() => {
-    const resultEl =
-      document.querySelector('[data-e2e-locator="submission-result"]') ||
-      document.querySelector(".text-green-s") ||
-      document.querySelector('[class*="accepted"]');
-
-    if (resultEl && resultEl.textContent.trim().toLowerCase() === "accepted") {
-      // Debounce: many DOM mutations fire at once; only act after things settle
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(handleAccepted, 800);
-    }
-  });
-
-  observer.observe(document.body, { childList: true, subtree: true });
 })();
