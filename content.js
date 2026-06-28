@@ -13,6 +13,7 @@
     isPushing = true;
 
     try {
+      showToast("Judging... waiting for result.", null);
       const result = await pollResult(submissionId);
       if (!result || result.status_msg !== "Accepted") { isPushing = false; return; }
 
@@ -152,14 +153,24 @@
     if (old) old.remove();
     const toast = document.createElement("div");
     toast.id = "lc2gh-toast";
+    const borderColor = success === null ? "#ffa116" : success ? "#00b8a3" : "#ef4444";
+    const dot = success === null ? "🟡" : success ? "🟢" : "🔴";
     toast.style.cssText = `
-      position: fixed; bottom: 24px; right: 24px; z-index: 99999;
-      background: ${success ? "#22c55e" : "#ef4444"};
-      color: white; padding: 12px 18px; border-radius: 10px;
-      font-family: monospace; font-size: 14px; max-width: 320px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      position: fixed; top: 64px; right: 20px; z-index: 99999;
+      background: #282828;
+      border: 1px solid ${borderColor};
+      color: #eff1f6; padding: 12px 16px; border-radius: 8px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px; max-width: 300px; min-width: 220px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      display: flex; align-items: flex-start; gap: 10px;
     `;
-    toast.innerHTML = `<b>LeetCode to GitHub</b><br>${message}`;
+    toast.innerHTML =
+      '<span style="font-size:16px;line-height:1.4">' + dot + '</span>' +
+      '<div>' +
+        '<div style="font-weight:600;font-size:11px;color:#a8b3cf;margin-bottom:3px;letter-spacing:0.5px">LEETCODE TO GITHUB</div>' +
+        '<div style="line-height:1.5">' + message + '</div>' +
+      '</div>';
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 5000);
   }
